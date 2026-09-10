@@ -20,6 +20,9 @@ internal static class ScreenshotPatch
 {
     private static bool Prefix(IResource res)
     {
+        if (!Plugin.IsLive)
+            return true;
+
         if (!MyRender11.m_screenshot.HasValue)
             return false;
 

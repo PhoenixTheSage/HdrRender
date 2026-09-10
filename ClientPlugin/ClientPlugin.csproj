@@ -10,8 +10,19 @@
     <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
 
     <!-- Default versions; override in Directory.Build.props  -->
-    <AssemblyVersion>1.0.0.0</AssemblyVersion>
-    <FileVersion>1.0.0.0</FileVersion>
+    <AssemblyVersion>1.1.0.0</AssemblyVersion>
+    <FileVersion>1.1.0.0</FileVersion>
+
+    <!-- Windows: Steam App registry, then common library locations -->
+    <_SteamAppInstallLocation Condition=" '$(Bin64)' == '' AND $([MSBuild]::IsOSPlatform('Windows')) ">$(registry:HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Steam App 244850@InstallLocation)</_SteamAppInstallLocation>
+    <Bin64 Condition=" '$(Bin64)' == '' AND '$(_SteamAppInstallLocation)' != '' ">$(_SteamAppInstallLocation)\Bin64</Bin64>
+    <Bin64 Condition=" '$(Bin64)' == '' AND Exists('T:\SteamLibrary\steamapps\common\SpaceEngineers\Bin64') ">T:\SteamLibrary\steamapps\common\SpaceEngineers\Bin64</Bin64>
+    <Bin64 Condition=" '$(Bin64)' == '' AND $([MSBuild]::IsOSPlatform('Windows')) AND Exists('C:\Program Files (x86)\Steam\steamapps\common\SpaceEngineers\Bin64') ">C:\Program Files (x86)\Steam\steamapps\common\SpaceEngineers\Bin64</Bin64>
+
+    <!-- Pulsar next to the game (Pulsar-Installer) or the classic %AppData%\Pulsar layout -->
+    <_GameRoot Condition=" '$(Pulsar)' == '' AND '$(Bin64)' != '' ">$([System.IO.Path]::GetFullPath('$(Bin64)\..'))</_GameRoot>
+    <Pulsar Condition=" '$(Pulsar)' == '' AND '$(_GameRoot)' != '' AND Exists('$(_GameRoot)\Pulsar\Legacy.exe') ">$(_GameRoot)\Pulsar</Pulsar>
+    <Pulsar Condition=" '$(Pulsar)' == '' AND Exists('$(USERPROFILE)\AppData\Roaming\Pulsar\Legacy.exe') ">$(USERPROFILE)\AppData\Roaming\Pulsar</Pulsar>
 
     <!-- Default configuration if none supplied -->
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
@@ -668,11 +679,16 @@
     <Publicize Include="VRage.Math" />
   </ItemGroup>
     
-  <PropertyGroup>
-    <PreBuildEvent>call "$(SolutionDir)\verify_props.bat" "$(Bin64)"</PreBuildEvent>
-  </PropertyGroup>
+  <Target Name="VerifyProps" BeforeTargets="BeforeBuild">
+    <Exec Condition="$([MSBuild]::IsOSPlatform('Windows'))"
+          Command="call &quot;$(RepoRoot)verify_props.bat&quot; &quot;$(Bin64)&quot;" />
+  </Target>
 
-  <PropertyGroup>
-    <PostBuildEvent>call "$(MSBuildProjectDirectory)\Deploy.bat" "$(AssemblyName).dll" "$(MSBuildProjectDirectory)\$(OutputPath)$(TargetFramework)"</PostBuildEvent>
-  </PropertyGroup>
+  <Target Name="DeployPlugin" AfterTargets="Build" Condition="'$(RunPostBuildEvent)' != 'Never'">
+    <PropertyGroup>
+      <DeploySourceDir>$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)\$(OutputPath)').TrimEnd('\'))</DeploySourceDir>
+    </PropertyGroup>
+    <Exec Condition="$([MSBuild]::IsOSPlatform('Windows'))"
+          Command="call &quot;$(MSBuildProjectDirectory)\Deploy.bat&quot; &quot;$(AssemblyName).dll&quot; &quot;$(DeploySourceDir)&quot; &quot;$(TargetFramework)&quot; &quot;$(Pulsar)&quot;" />
+  </Target>
 </Project>

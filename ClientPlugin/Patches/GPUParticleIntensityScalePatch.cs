@@ -51,6 +51,8 @@ internal static class GpuParticleIntensityScalePatch
 
     private static void Prefix(int emitterCount, MyGPUEmitterLayoutData[] emitterData)
     {
+        if (!Plugin.IsLive)
+            return;
         var k = Config.Current.LdrIntensity;
         if (k <= 1f) return;
         for (var i = 0; i < emitterCount; i++)

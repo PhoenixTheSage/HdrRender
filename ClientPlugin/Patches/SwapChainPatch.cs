@@ -14,8 +14,18 @@ internal static class SwapChainReplacer
 {
     // Driver-reported AllowTearing support. Probed once at plugin Init;
     // false on Win10 < 1709 (Factory5 unavailable) or drivers that opt out.
-    // Read by Present-flag patch to decide whether to force tearing path.
+    // This is an adapter/OS capability, not "G-Sync is currently on".
     public static bool AllowTearingSupported { get; private set; }
+
+    // True only after ReplaceSwapChain created the chain with AllowTearing.
+    // Live config must not drive Present flags: DXGI_PRESENT_ALLOW_TEARING
+    // without the creation flag is DXGI_ERROR_INVALID_CALL (SE then reports
+    // DEVICE_REMOVED at Present).
+    public static bool TearingArmed { get; private set; }
+
+    // Flags passed to CreateSwapChainForHwnd. ResizeBuffers cannot add or
+    // remove ALLOW_TEARING — it must receive the same set.
+    public static SwapChainFlags CreationFlags { get; private set; }
 
     // Device-level frame latency. Per-swapchain SetMaximumFrameLatency would
     // require the swapchain to be created with FrameLatencyWaitableObject and
@@ -57,7 +67,7 @@ internal static class SwapChainReplacer
 
     public static void ReplaceSwapChain()
     {
-        if (HdrResources.Initialized)
+        if (!Plugin.IsLive || HdrResources.Initialized)
             return;
 
         var currentSwapchain = MyRender11.m_swapchain;
@@ -88,8 +98,10 @@ internal static class SwapChainReplacer
 
         var currentSettings = MyPlatformRender.m_settings;
         var flags = SwapChainFlags.AllowModeSwitch;
-        if (Config.Current.AllowTearing && AllowTearingSupported)
+        TearingArmed = Config.Current.AllowTearing && AllowTearingSupported;
+        if (TearingArmed)
             flags |= SwapChainFlags.AllowTearing;
+        CreationFlags = flags;
 
         var desc = new SwapChainDescription1
         {
@@ -118,7 +130,9 @@ internal static class SwapChainReplacer
         MyRender11.Backbuffer = new MyBackbuffer(sc3.GetBackBuffer<Texture2D>(0));
 
         factory2.MakeWindowAssociation(hwnd, WindowAssociationFlags.IgnoreAll);
-        VRage.Utils.MyLog.Default.WriteLine("HDR: swapchain replaced with flip model fp16 scRGB");
+        VRage.Utils.MyLog.Default.WriteLine(TearingArmed
+            ? "HDR: swapchain replaced with flip model fp16 scRGB (AllowTearing)"
+            : "HDR: swapchain replaced with flip model fp16 scRGB");
 
         // If SE was started directly into Fullscreen, SE's window has been left in
         // a fullscreen-leftover state by the SetFullscreenState(false) above and
@@ -139,8 +153,9 @@ internal static class SwapChainReplacer
 
         MyRender11.Backbuffer?.Release();
         var d = sw.Description;
+        var flags = CreationFlags != 0 ? CreationFlags : d.Flags;
         sw.ResizeBuffers(d.BufferCount, d.ModeDescription.Width, d.ModeDescription.Height,
-            HdrResources.BackbufferFormat, d.Flags);
+            HdrResources.BackbufferFormat, flags);
         MyRender11.Backbuffer = new MyBackbuffer(sw.GetBackBuffer<Texture2D>(0));
     }
 }
@@ -161,6 +176,8 @@ internal static class TryChangeToFullscreenPatch
 {
     private static void Postfix()
     {
+        if (!Plugin.IsLive)
+            return;
         var sw = MyRender11.m_swapchain;
         if (sw == null) return;
 
@@ -186,6 +203,8 @@ internal static class PresentForceExitFullscreenPatch
 
     private static void Prefix()
     {
+        if (!Plugin.IsLive)
+            return;
         var sw = MyRender11.m_swapchain;
         if (sw == null) return;
 
@@ -205,8 +224,13 @@ internal static class PresentForceExitFullscreenPatch
 // SE's Present call sites (MyRender11.cs:3651-3658) hard-code PresentFlags.None
 // and pass m_settings.VSync as syncInterval. DXGI requires that AllowTearing
 // be combined with syncInterval=0 AND PresentFlags.AllowTearing — any other
-// pairing returns DXGI_ERROR_INVALID_CALL. Override both here when the feature
-// is active so SE's VSync setting is bypassed for our swapchain.
+// pairing returns DXGI_ERROR_INVALID_CALL. Override both here when the
+// swapchain was created with the flag so SE's VSync is bypassed.
+//
+// Do not key off live Config.AllowTearing: the checkbox is restart-gated.
+// Do not pass ALLOW_TEARING in exclusive fullscreen (SetFullscreenState(true));
+// that is illegal even when the driver reports PresentAllowTearing and G-Sync
+// is enabled. Exclusive G-Sync is a driver path; syncInterval 0 is enough.
 //
 // __instance filter: SwapChain.Present is shared by every swapchain in the
 // process. Only override for the one we own; other plugins' swapchains pass
@@ -214,11 +238,31 @@ internal static class PresentForceExitFullscreenPatch
 [HarmonyPatch(typeof(SwapChain), nameof(SwapChain.Present), typeof(int), typeof(PresentFlags))]
 internal static class SwapChainPresentTearingPatch
 {
+    static bool _loggedExclusiveSkip;
+
     private static void Prefix(SwapChain __instance, ref int syncInterval, ref PresentFlags flags)
     {
-        if (!Config.Current.AllowTearing || !SwapChainReplacer.AllowTearingSupported) return;
+        if (!Plugin.IsLive)
+            return;
+        if (!SwapChainReplacer.TearingArmed) return;
         if (!ReferenceEquals(__instance, MyRender11.m_swapchain)) return;
+
         syncInterval = 0;
+
+        __instance.GetFullscreenState(out var exclusive, out var output);
+        output?.Dispose();
+        if (exclusive)
+        {
+            if (!_loggedExclusiveSkip)
+            {
+                _loggedExclusiveSkip = true;
+                VRage.Utils.MyLog.Default.WriteLine(
+                    "HDR: AllowTearing Present flag skipped (exclusive Fullscreen). " +
+                    "Use Windowed or Fullscreen Window for DXGI VRR; driver G-Sync still applies here.");
+            }
+            return;
+        }
+
         flags |= PresentFlags.AllowTearing;
     }
 }

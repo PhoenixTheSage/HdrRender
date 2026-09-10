@@ -1,0 +1,15 @@
+{
+  "id": "hdr.output",
+  "name": "HDR Output",
+  "priority": 0,
+  "passes": [
+    {
+      "id": "hdr.tonemap",
+      "slot": "AfterUpscale",
+      "file": "Fullscreen/AfterUpscale/HdrTonemap.hlsl",
+      "compose": "Replace",
+      "priority": 0,
+      "temporal": ["InColor", "Display"]
+    }
+  ]
+}

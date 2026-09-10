@@ -21,19 +21,27 @@ Swapchain is upgraded to flip model R16G16B16A16_Float with scRGB color space.
 Lighting buffer, bloom chain, and custom textures (LCDs, text panels) are upgraded from R11G11B10 / R8G8B8A8 to R16G16B16A16 for full-precision HDR accumulation.
 BT.2390-based tonemapping preserves highlight detail beyond SDR white, with configurable peak / paper-white / source peak / black lift.
 Emissive billboards (thrusters, lasers, muzzle flashes) and GPU particles (exhaust, sparks) are boosted by a configurable factor; diffuse content is untouched.
-UI is composited at user-set paper-white brightness.
+UI is composited at paper-white with a HUD-only gain and contrast shoulder.
 Screenshots are captured as OpenEXR (HDR) and tonemapped PNG (SDR) in parallel.
 Optional G-Sync/FreeSync tearing support and low-latency mode (1-frame GPU queue).
 Auto-disables itself if it crashes during init, with a flag in the config to re-enable.
-Requires Windows HDR enabled and a supported display; can be force-enabled on SDR displays.</Description>
+Requires Windows HDR enabled and a supported display; can be force-enabled on SDR displays.
+Depends on Anomaly Shader Framework for AfterUpscale BT.2390 (Display tenant). Rich HUD Master optional.</Description>
+
+    <DependencyIds>
+        <Id>A9C29274-E447-49EE-881B-C980E6D190FD</Id>
+    </DependencyIds>
 
     <!-- Only source code in the Directory entries listed in SourceDirectories is compiled. Exclude any test projects or similar. -->
     <SourceDirectories>
         <Directory>ClientPlugin</Directory>
     </SourceDirectories>
 
-    <!-- To specify asset files to be copied onto disk, use the AssetFolder tag. -->
+    <!-- Pulsar 2.4+ ignores the AssetFolder tag and only ships named <Asset> entries.
+         Keep both so older loaders and 2.4+ both deliver Assets/Shaders/UiComposite.hlsl. -->
     <AssetFolder>ClientPlugin/Assets/</AssetFolder>
+    <Asset Name="AssetFolder" Path="ClientPlugin/Assets/" />
+    <Asset Name="AnomalyPack" Path="ClientPlugin/Assets/AnomalyPack" />
 
     <!-- The current plugin version's commit hash -->
     <Commit>HEAD</Commit>

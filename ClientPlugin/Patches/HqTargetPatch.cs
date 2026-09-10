@@ -8,6 +8,8 @@ internal static class HqTargetPatch
 {
     private static void Postfix(ref MyGraphicsSettings __result)
     {
+        if (!Plugin.IsLive)
+            return;
         __result.PerformanceSettings.RenderSettings.HqTarget = Config.Current.HqTarget;
     }
 }
