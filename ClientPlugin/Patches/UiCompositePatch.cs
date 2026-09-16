@@ -12,46 +12,66 @@ using VRageRender;
 
 namespace ClientPlugin.Patches;
 
-// Per-frame UI offscreen slot, owned by the render thread.
+// Persistent UI offscreen, owned by the render thread.
 //
-// Lifetime: RenderMainSprites Prefix borrows, ConsumeMainSprites Postfix releases.
-// The two patches sit on different methods so Harmony's __state cannot carry the
-// borrow across them — we keep it in a static slot here.
+// Lifetime: CreateRtv on first use / resize; DisposeHeld on HdrResources.Release.
+// RenderMainSprites Prefix points Current at it; ConsumeMainSprites Postfix
+// composites then nulls Current. Harmony __state cannot cross the two methods.
 //
 // Render-thread slot only. Keen records sprites on a Parallel.Start deferred
 // RC ("UpdateAndRenderMainSprites"). We ClearRtv / composite on MyImmediateRC.RC
 // around that task (Prefix before Start, Consume postfix after Wait). Do not
 // touch the immediate context from the sprite worker.
 //
-// Contract: after Consume releases the texture it MUST null the slot, so the next
-// Render Prefix does not double-release a dead handle.
+// Contract: Consume must null Current after the composite Draw so the next
+// Prefix treats the slot as unset. The CreateRtv itself stays in `held`.
 internal static class UiOffscreenSlot
 {
-    public static IBorrowedRtvTexture Current { get; private set; }
+    public static IRtvTexture Current { get; private set; }
     public static IRtvBindable OverrideTarget { get; private set; }
+    static IRtvTexture held;
+    static Vector2I heldSize;
 
-    // Replace the current slot with a freshly borrowed RTV. Any leftover from a previous
-    // frame (i.e. Consume never ran due to an exception) is released first so the pool
-    // counters stay sane. OverrideTarget is reset as part of the invariant: a fresh slot
-    // composites to Backbuffer by default; callers that need to hijack the composite
-    // target MUST call SetOverrideTarget after Replace. Without this reset an exception
-    // on the screenshot path would leave a stale OverrideTarget pointing at a returned-
-    // to-pool RTV, and the next normal frame would composite UI into the wrong RTV
-    // (re-borrowed by some other pass or, after 16 frames, a disposed RenderTargetView).
-    public static void Replace(IBorrowedRtvTexture freshlyBorrowed)
+    public static IRtvTexture Acquire(int width, int height, string debugName)
     {
-        Current?.Release();
-        Current = freshlyBorrowed;
+        if (width <= 0 || height <= 0)
+            return null;
+        if (held != null && heldSize.X == width && heldSize.Y == height)
+            return held;
+        if (held != null)
+            MyManagers.RwTextures.DisposeTex(ref held);
+        held = MyManagers.RwTextures.CreateRtv(
+            debugName, width, height, Format.R8G8B8A8_UNorm_SRgb);
+        heldSize = new Vector2I(width, height);
+        return held;
+    }
+
+    public static void DisposeHeld()
+    {
+        if (held != null)
+            MyManagers.RwTextures.DisposeTex(ref held);
+        held = null;
+        heldSize = default;
+        Current = null;
+        OverrideTarget = null;
+    }
+
+    // Point Current at this frame's offscreen. OverrideTarget resets: a fresh
+    // slot composites to Backbuffer; screenshot callers must SetOverrideTarget
+    // after Replace.
+    public static void Replace(IRtvTexture tex)
+    {
+        Current = tex;
         OverrideTarget = null;
     }
 
     public static void SetOverrideTarget(IRtvBindable target) => OverrideTarget = target;
 
-    // Consume side: release the texture and clear the slot. After this point Current
-    // returns null and the next Render Prefix sees a clean state.
+    // End of composite: drop the "this frame" pointer. The CreateRtv stays
+    // until resize or HdrResources.Release — pool BorrowRtv is frame-scoped
+    // and cannot be held across Present.
     public static void ReleaseAndClear()
     {
-        Current?.Release();
         Current = null;
         OverrideTarget = null;
     }
@@ -70,10 +90,9 @@ internal static class RenderMainSpritesPatch
         SwapChainReplacer.ReplaceSwapChain();
 
         var res = MyRender11.ViewportResolution;
-        var uiOff = MyManagers.RwTexturesPool.BorrowRtv(
-            "HdrOutput.UiOffscreen",
-            res.X, res.Y,
-            Format.R8G8B8A8_UNorm_SRgb);
+        var uiOff = UiOffscreenSlot.Acquire(res.X, res.Y, "HdrOutput.UiOffscreen");
+        if (uiOff == null)
+            return true;
         UiOffscreenSlot.Replace(uiOff);
 
         MyImmediateRC.RC.ClearRtv(uiOff, new RawColor4(0, 0, 0, 0));
@@ -138,10 +157,10 @@ internal static class RenderMainSprites4Patch
         // Order matters: Replace() resets OverrideTarget to null as part of its invariant,
         // so SetOverrideTarget MUST run after Replace - otherwise the hijack target is
         // wiped before it takes effect.
-        var uiOff = MyManagers.RwTexturesPool.BorrowRtv(
-            "HdrOutput.ScreenshotUiOffscreen",
-            rtv.Size.X, rtv.Size.Y,
-            Format.R8G8B8A8_UNorm_SRgb);
+        var uiOff = UiOffscreenSlot.Acquire(
+            rtv.Size.X, rtv.Size.Y, "HdrOutput.ScreenshotUiOffscreen");
+        if (uiOff == null)
+            return true;
         MyImmediateRC.RC.ClearRtv(uiOff, new RawColor4(0, 0, 0, 0));
         UiOffscreenSlot.Replace(uiOff);
         UiOffscreenSlot.SetOverrideTarget(rtv);
@@ -224,8 +243,6 @@ internal static class ConsumeMainSpritesPatch
 
         rc.PixelShader.SetSrv(0, null);
 
-        // Release the borrow AND null the slot in one step. Without this null, the next
-        // RenderMainSprites Prefix would call Release() again on this same dead handle.
         UiOffscreenSlot.ReleaseAndClear();
     }
 }

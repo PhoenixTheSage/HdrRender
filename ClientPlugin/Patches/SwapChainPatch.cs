@@ -10,6 +10,35 @@ using VRageRender;
 
 namespace ClientPlugin.Patches;
 
+/// <summary>
+/// Exclusive fullscreen without <c>GetFullscreenState</c>. That DXGI call
+/// returns an <c>IDXGIOutput</c> and is a kernel round-trip; two of them
+/// per Present was a measurable hitch. <c>GetDesc().Windowed</c> is local.
+/// </summary>
+internal static class SwapChainExclusive
+{
+    public static bool ThisPresent { get; private set; }
+
+    public static bool Read(SwapChain sw)
+    {
+        if (sw == null)
+            return false;
+        try
+        {
+            return !sw.Description.IsWindowed;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    public static void BeginPresent(SwapChain sw)
+    {
+        ThisPresent = Read(sw);
+    }
+}
+
 internal static class SwapChainReplacer
 {
     // Driver-reported AllowTearing support. Probed once at plugin Init;
@@ -181,9 +210,8 @@ internal static class TryChangeToFullscreenPatch
         var sw = MyRender11.m_swapchain;
         if (sw == null) return;
 
-        sw.GetFullscreenState(out var isFs, out var output);
-        output?.Dispose();
-        if (!isFs) return;
+        if (!SwapChainExclusive.Read(sw))
+            return;
 
         SwapChainReplacer.RebuildBackbuffer();
         VRage.Utils.MyLog.Default.WriteLine("HDR: ResizeBuffers after SetFullscreenState(true)");
@@ -208,8 +236,8 @@ internal static class PresentForceExitFullscreenPatch
         var sw = MyRender11.m_swapchain;
         if (sw == null) return;
 
-        sw.GetFullscreenState(out var isFs, out var fsOut);
-        fsOut?.Dispose();
+        SwapChainExclusive.BeginPresent(sw);
+        var isFs = SwapChainExclusive.ThisPresent;
 
         if (_wasFullScreen && !isFs)
         {
@@ -249,9 +277,7 @@ internal static class SwapChainPresentTearingPatch
 
         syncInterval = 0;
 
-        __instance.GetFullscreenState(out var exclusive, out var output);
-        output?.Dispose();
-        if (exclusive)
+        if (SwapChainExclusive.ThisPresent)
         {
             if (!_loggedExclusiveSkip)
             {
@@ -264,5 +290,47 @@ internal static class SwapChainPresentTearingPatch
         }
 
         flags |= PresentFlags.AllowTearing;
+    }
+}
+
+// Keen ResizeSwapchain always passes SwapChainFlags.AllowModeSwitch only.
+// ALLOW_TEARING cannot be added or removed by ResizeBuffers (DXGI returns
+// E_INVALIDARG / DXGI_ERROR_INVALID_CALL). Restore the flags used at
+// CreateSwapChainForHwnd, and keep the scRGB format + color space.
+[HarmonyPatch(typeof(SwapChain), nameof(SwapChain.ResizeBuffers),
+    typeof(int), typeof(int), typeof(int), typeof(Format), typeof(SwapChainFlags))]
+internal static class SwapChainResizeBuffersPatch
+{
+    private static void Prefix(SwapChain __instance, ref Format newFormat, ref SwapChainFlags swapChainFlags)
+    {
+        if (!Plugin.IsLive || !HdrResources.Initialized)
+            return;
+        if (!ReferenceEquals(__instance, MyRender11.m_swapchain))
+            return;
+
+        newFormat = HdrResources.BackbufferFormat;
+        if (SwapChainReplacer.CreationFlags != 0)
+            swapChainFlags = SwapChainReplacer.CreationFlags;
+    }
+
+    private static void Postfix(SwapChain __instance, int width, int height)
+    {
+        if (!Plugin.IsLive || !HdrResources.Initialized)
+            return;
+        if (!ReferenceEquals(__instance, MyRender11.m_swapchain))
+            return;
+
+        try
+        {
+            if (__instance is SwapChain3 sc3)
+                sc3.ColorSpace1 = HdrResources.HdrColorSpace;
+        }
+        catch (Exception e)
+        {
+            VRage.Utils.MyLog.Default.WriteLine($"HDR: ColorSpace after ResizeBuffers failed: {e.Message}");
+        }
+
+        VRage.Utils.MyLog.Default.WriteLine(
+            $"HDR: ResizeBuffers {width}x{height} flags={SwapChainReplacer.CreationFlags}");
     }
 }

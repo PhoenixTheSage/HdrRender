@@ -150,6 +150,7 @@ internal static class HdrResources
             UiConstantBuffer = null;
         }
 
+        ClientPlugin.Patches.UiOffscreenSlot.DisposeHeld();
         Initialized = false;
     }
 

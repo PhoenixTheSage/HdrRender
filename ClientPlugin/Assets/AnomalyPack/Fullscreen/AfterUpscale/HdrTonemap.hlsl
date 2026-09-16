@@ -1,8 +1,5 @@
 #include <AnomalyFullscreen.hlsli>
 
-SamplerState PointSamp : register(s0);
-SamplerState LinearSamp : register(s1);
-
 #define paper_white           AnomalyPassUniform0.x
 #define peak                  AnomalyPassUniform0.y
 #define source_peak           AnomalyPassUniform0.z
@@ -189,9 +186,8 @@ float3 apply_channel_soft_clip(float3 color)
     return color * (compressed / max_c);
 }
 
-float4 __pixel_shader(float4 pos : SV_Position, float2 uv : TEXCOORD0) : SV_Target
+float4 grade_tonemap(uint2 texel, float2 uv)
 {
-    uint2 texel = uint2(pos.xy);
     float3 source = AnomalySceneColor.Load(int3(texel, 0)).xyz;
 
     source = apply_grain(source, texel);
@@ -202,8 +198,8 @@ float4 __pixel_shader(float4 pos : SV_Position, float2 uv : TEXCOORD0) : SV_Targ
 
     if (disable_postprocess < 0.5)
     {
-        float dirt = AnomalyDirt.SampleLevel(LinearSamp, uv, 0) * bloom_dirt_ratio + (1 - bloom_dirt_ratio);
-            color += AnomalyBloom.SampleLevel(LinearSamp, uv, 0).xyz * bloom_mult * dirt;
+        float dirt = AnomalyDirt.SampleLevel(AnomalyLinearSampler, uv, 0) * bloom_dirt_ratio + (1 - bloom_dirt_ratio);
+        color += AnomalyBloom.SampleLevel(AnomalyLinearSampler, uv, 0).xyz * bloom_mult * dirt;
     }
 
     color = clamp(color, 0, 65504);
@@ -256,3 +252,22 @@ float4 __pixel_shader(float4 pos : SV_Position, float2 uv : TEXCOORD0) : SV_Targ
 
     return float4(hdr, alpha);
 }
+
+float4 __pixel_shader(float4 pos : SV_Position, float2 uv : TEXCOORD0) : SV_Target
+{
+    return grade_tonemap(uint2(pos.xy), uv);
+}
+
+#ifdef ANOMALY_FULLSCREEN_COMPUTE
+[numthreads(8, 8, 1)]
+void __compute_shader(uint3 id : SV_DispatchThreadID)
+{
+    uint w, h;
+    AnomalyComputeDest.GetDimensions(w, h);
+    if (id.x >= w || id.y >= h)
+        return;
+
+    float2 uv = (float2(id.xy) + 0.5) / float2(w, h);
+    AnomalyComputeDest[id.xy] = grade_tonemap(id.xy, uv);
+}
+#endif
