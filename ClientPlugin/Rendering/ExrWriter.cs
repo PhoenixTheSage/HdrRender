@@ -36,7 +36,9 @@ internal static class ExrWriter
             var linesInChunk = Math.Min(ZipBlockLines, height - yStart);
             var raw = new byte[linesInChunk * rawLineSize];
             ExtractBgr(pixelData, rowPitch, width, yStart, linesInChunk, raw);
-            compressedChunks[chunk] = ZlibCompress(raw);
+            var compressed = ZlibCompress(raw);
+            // EXR readers distinguish raw ZIP blocks by their uncompressed size.
+            compressedChunks[chunk] = compressed.Length < raw.Length ? compressed : raw;
         });
 
         // Stage 2: must write chunks in order so stream offsets are correct.

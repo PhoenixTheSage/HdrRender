@@ -22,6 +22,7 @@ internal static class AnomalyHook
     static readonly object Gate = new();
 
     static MethodInfo _register;
+    static MethodInfo _tryRegister;
     static MethodInfo _setUniforms;
     static PropertyInfo _hasDisplayTenant;
     static PropertyInfo _hasUpscaleConsumer;
@@ -30,6 +31,7 @@ internal static class AnomalyHook
     static bool _packRegistered;
     static bool _probed;
     static string _lastUniformError;
+    public static string RegistrationError { get; private set; }
 
     public static bool RegistryFound
     {
@@ -88,16 +90,27 @@ internal static class AnomalyHook
         Probe();
         MethodInfo register;
         lock (Gate)
-            register = _register;
+        {
+            _packRegistered = false;
+            RegistrationError = null;
+            register = _tryRegister;
+        }
         if (register == null)
         {
-            MyLog.Default.WriteLine("HDR: Anomaly ShaderPackRegistry not found");
+            RegistrationError = "Anomaly checked pack registration is unavailable. Update Anomaly and restart.";
+            MyLog.Default.WriteLine("HDR: " + RegistrationError);
             return false;
         }
 
         try
         {
-            register.Invoke(null, new object[] { PackId, root });
+            var args = new object[] { PackId, root, PassId, null };
+            if (register.Invoke(null, args) is not true)
+            {
+                RegistrationError = args[3] as string ?? "Anomaly rejected the HDR Display pack.";
+                MyLog.Default.WriteLine("HDR: " + RegistrationError);
+                return false;
+            }
             lock (Gate)
                 _packRegistered = true;
             MyLog.Default.WriteLine("HDR: registered Anomaly pack " + PackId + " at " + root);
@@ -105,7 +118,8 @@ internal static class AnomalyHook
         }
         catch (Exception e)
         {
-            MyLog.Default.WriteLine("HDR: ShaderPackRegistry.Register failed: " + e.Message);
+            RegistrationError = (e.InnerException ?? e).Message;
+            MyLog.Default.WriteLine("HDR: ShaderPackRegistry.TryRegister failed: " + RegistrationError);
             return false;
         }
     }
@@ -234,6 +248,9 @@ internal static class AnomalyHook
 
             if (pack != null && _register == null)
                 _register = pack.GetMethod("Register", BindingFlags.Public | BindingFlags.Static);
+            if (pack != null && _tryRegister == null)
+                _tryRegister = pack.GetMethod("TryRegister", BindingFlags.Public | BindingFlags.Static,
+                    null, new[] { typeof(string), typeof(string), typeof(string), typeof(string).MakeByRefType() }, null);
 
             if (fullscreen != null && _setUniforms == null)
                 _setUniforms = fullscreen.GetMethod("SetUniforms", BindingFlags.Public | BindingFlags.Static);

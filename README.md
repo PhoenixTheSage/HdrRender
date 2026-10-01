@@ -5,6 +5,7 @@ Pulsar plugin that depends on **Anomaly Shader Framework**. It keeps the flip-mo
 ## Requirements
 
 - [Anomaly](https://github.com/PhoenixTheSage/Anomaly) (`A9C29274-E447-49EE-881B-C980E6D190FD`) — Pulsar `DependencyIds`
+- Anomaly must expose `ShaderPackRegistry.TryRegister(id, root, requiredFullscreenProgramId, out error)`. Older builds leave HDR inactive with an update message. Registration verifies `hdr.tonemap` before render patches are installed; acceptance can precede Anomaly initialization and shader compilation.
 - Windows HDR on the current display (or **Force enable**, restart required)
 - Optional: [Rich HUD Master](https://steamcommunity.com/sharedfiles/filedetails/?id=1965654081) for **Anomaly Shaders → HDR → Settings**. Pulsar MyGui remains the fallback
 

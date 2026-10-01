@@ -193,11 +193,11 @@ float4 grade_tonemap(uint2 texel, float2 uv)
     source = apply_grain(source, texel);
     source = clamp(source, 0, 65504);
 
-    float exposure = exp2(AnomalyAvgLuminance.Load(int3(0, 0, 0)).g);
-    float3 color = exposure * source;
+    float3 color = source;
 
     if (disable_postprocess < 0.5)
     {
+        color *= exp2(AnomalyAvgLuminance.Load(int3(0, 0, 0)).g);
         float dirt = AnomalyDirt.SampleLevel(AnomalyLinearSampler, uv, 0) * bloom_dirt_ratio + (1 - bloom_dirt_ratio);
         color += AnomalyBloom.SampleLevel(AnomalyLinearSampler, uv, 0).xyz * bloom_mult * dirt;
     }

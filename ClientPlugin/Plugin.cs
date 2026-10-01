@@ -16,8 +16,8 @@ using VRage.Plugins;
 using VRageRender;
 
 #if !DEV_BUILD
-[assembly: AssemblyVersion("1.2.0.0")]
-[assembly: AssemblyFileVersion("1.2.0.0")]
+[assembly: AssemblyVersion("1.2.1.0")]
+[assembly: AssemblyFileVersion("1.2.1.0")]
 #endif
 
 namespace ClientPlugin;
@@ -111,6 +111,12 @@ public class Plugin : IPlugin
         try
         {
             HdrResources.InitShaders();
+            if (!AnomalyHook.TryRegisterPack(packRoot))
+            {
+                FailLive("HDR Output — Pack failed",
+                    AnomalyHook.RegistrationError ?? "Could not register the Anomaly Display pack. HDR pipeline not started.");
+                return;
+            }
             Patches.SwapChainReplacer.ProbeFeatureSupport();
             Patches.SwapChainReplacer.ApplyMaximumFrameLatency();
 
@@ -121,13 +127,6 @@ public class Plugin : IPlugin
         {
             FailLive("HDR Output — Init failed", e.Message);
             VRage.Utils.MyLog.Default.WriteLine($"HDR: Init failed: {e}");
-            return;
-        }
-
-        if (!AnomalyHook.TryRegisterPack(packRoot))
-        {
-            FailLive("HDR Output — Pack failed",
-                "Could not register the Anomaly Display pack. HDR pipeline not started.");
             return;
         }
 
