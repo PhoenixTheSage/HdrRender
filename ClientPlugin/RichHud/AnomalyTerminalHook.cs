@@ -110,7 +110,6 @@ internal static class AnomalyTerminalHook
     {
         var type = page.GetType();
         Invoke(type, page, "Category", "Display");
-        Invoke(type, page, "Label", "Display", (Func<string>)RichHudOptions.StatusLabel);
         Invoke(type, page, "Checkbox", "HDR",
             (Func<bool>)RichHudOptions.GetEnabled,
             (Action<bool>)RichHudOptions.SetEnabled,
@@ -175,9 +174,6 @@ internal static class AnomalyTerminalHook
             (Func<bool>)RichHudOptions.GetDisabledAfterCrash,
             (Action<bool>)RichHudOptions.SetDisabledAfterCrash,
             "Uncheck to retry HDR on next launch after an init crash.");
-        Invoke(type, page, "Button", "Show Status",
-            (Action)RichHudOptions.ShowStatus,
-            "Swapchain format, Display tenant, uniforms, Anomaly handshake");
     }
 
     static void Invoke(Type type, object instance, string name, params object[] args)

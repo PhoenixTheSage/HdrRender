@@ -7,7 +7,7 @@ namespace ClientPlugin.Anomaly;
 /// Early read of Anomaly's renderer route. No compile-time reference.
 /// Pending closes both device paths. A missing route fails closed.
 /// </summary>
-internal static class AnomalyRenderer
+public static class AnomalyRenderer
 {
     public const string RouteTypeName = "ClientPlugin.Backend.RendererRoute";
     public const int Pending = 0;

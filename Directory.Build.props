@@ -1,4 +1,8 @@
 <Project>
+  <!-- Device and shared projects must have separate NuGet and intermediate state. -->
+  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'ClientPlugin.Dx11'">
+    <BaseIntermediateOutputPath>obj/Dx11/</BaseIntermediateOutputPath>
+  </PropertyGroup>
   <!-- Folders overridable by Directory.Build.props.user -->
   <PropertyGroup>
     <!-- Folder containing SpaceEngineers.exe.
@@ -9,9 +13,9 @@
     <Pulsar></Pulsar>
 
     <!-- Plugin version -->
-    <Version>1.3.0</Version>
-    <AssemblyVersion>1.3.0.0</AssemblyVersion>
-    <FileVersion>1.3.0.0</FileVersion>
+    <Version>1.3.1</Version>
+    <AssemblyVersion>1.3.1.0</AssemblyVersion>
+    <FileVersion>1.3.1.0</FileVersion>
   </PropertyGroup>
 
   <Import Project="$(MSBuildThisFileDirectory)Directory.Build.props.user"

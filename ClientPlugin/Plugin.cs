@@ -11,8 +11,8 @@ using VRage.Plugins;
 [assembly: System.Runtime.CompilerServices.InternalsVisibleTo("HdrOutput.Dx11")]
 
 #if !DEV_BUILD
-[assembly: AssemblyVersion("1.3.0.0")]
-[assembly: AssemblyFileVersion("1.3.0.0")]
+[assembly: AssemblyVersion("1.3.1.0")]
+[assembly: AssemblyFileVersion("1.3.1.0")]
 #endif
 
 namespace ClientPlugin;
@@ -20,12 +20,15 @@ namespace ClientPlugin;
 public class Plugin : IPlugin
 {
     public const string Name = "HdrOutput";
-    internal static string StatusTitle { get; set; } = "HDR Output";
-    internal static string StatusInfo { get; set; }
-    internal static bool DisplayHdrSupported { get; set; }
-    internal static bool IsLive { get; set; }
-    internal static string AssetFolder { get; private set; }
-    internal static string AnomalyPackRoot { get; private set; }
+    // Public for HdrOutput.Dx11. The JIT rejects calls to these internal
+    // members with ArgumentException ("Value does not fall within the expected
+    // range") even with InternalsVisibleTo, so the satellite never starts.
+    public static string StatusTitle { get; set; } = "HDR Output";
+    public static string StatusInfo { get; set; }
+    public static bool DisplayHdrSupported { get; set; }
+    public static bool IsLive { get; set; }
+    public static string AssetFolder { get; internal set; }
+    public static string AnomalyPackRoot { get; internal set; }
 
     private SettingsGenerator _settingsGenerator;
 
@@ -79,10 +82,12 @@ public class Plugin : IPlugin
         ConfigStorage.FlushPending(true);
         if (AnomalyRenderer.AllowDx11Device)
             Dx11Bridge.Call("OnDispose");
+        SatelliteAssembly.Reset();
     }
 
     public void Update()
     {
+        PluginStatusPage.TryInstall("HDR", Config.ShowStatus);
         AnomalyTerminalHook.TryInstall();
         ConfigStorage.FlushPending();
         if (AnomalyRenderer.AllowGuestWork)

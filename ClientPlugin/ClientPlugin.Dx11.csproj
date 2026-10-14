@@ -1,7 +1,12 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net48</TargetFramework>
+    <Version>1.3.1</Version>
+    <AssemblyVersion>1.3.1.0</AssemblyVersion>
+    <FileVersion>1.3.1.0</FileVersion>
+    <TargetFrameworks Condition="'$(MSBuildRuntimeType)' == 'Core'">net48;net10.0</TargetFrameworks>
+    <TargetFrameworks Condition="'$(MSBuildRuntimeType)' != 'Core'">net48</TargetFrameworks>
     <OutputType>Library</OutputType>
+    <PlatformTarget>x64</PlatformTarget>
     <RootNamespace>ClientPlugin</RootNamespace>
     <AssemblyName>HdrOutput.Dx11</AssemblyName>
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
@@ -13,7 +18,7 @@
     <Bin64Dir>$(Bin64)\</Bin64Dir>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="ClientPlugin.csproj" />
+    <ProjectReference Include="ClientPlugin.csproj" AdditionalProperties="SkipDx11Satellite=true;RunPostBuildEvent=Never" />
     <Compile Include="Anomaly\Dx11Entry.cs" />
     <Compile Include="Anomaly\AnomalyHook.cs" />
     <Compile Include="Anomaly\RenderTraceBind.cs" />

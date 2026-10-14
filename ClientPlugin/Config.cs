@@ -150,8 +150,8 @@ public class Config : INotifyPropertyChanged
     [UsedImplicitly]
     public static void ShowStatus()
     {
-        var hook = AnomalyRenderer.AllowDx11Device ? Dx11Bridge.Call<string>("StatusLine") : "Vulkan FP16 swapchain request.";
-        var body = (Plugin.StatusInfo ?? "") + "\n" + (hook ?? "") +
+        var hook = AnomalyRenderer.AllowDx11Device ? Dx11Bridge.StatusText : "Vulkan FP16 swapchain request.";
+        var body = PluginStatusPage.RendererLine + "\n" + (Plugin.StatusInfo ?? "") + "\n" + (hook ?? "") +
                    "\nLive: " + Plugin.IsLive +
                    "  Enabled: " + Current.Enabled +
                    "  Display HDR: " + Plugin.DisplayHdrSupported +
