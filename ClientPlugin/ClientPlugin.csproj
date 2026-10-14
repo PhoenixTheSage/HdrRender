@@ -21,8 +21,8 @@
     <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
 
     <!-- Default versions; override in Directory.Build.props -->
-    <AssemblyVersion>1.2.1.0</AssemblyVersion>
-    <FileVersion>1.2.1.0</FileVersion>
+    <AssemblyVersion>1.3.0.0</AssemblyVersion>
+    <FileVersion>1.3.0.0</FileVersion>
     <PathSeparator Condition="$([MSBuild]::IsOSPlatform('Windows'))">\</PathSeparator>
     <PathSeparator Condition="!$([MSBuild]::IsOSPlatform('Windows'))">/</PathSeparator>
 
@@ -251,10 +251,14 @@
       <HintPath>$(Bin64Dir)VRage.Render.dll</HintPath>
       <Private>False</Private>
     </Reference>
-    <Reference Include="VRage.Render11, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null">
-      <HintPath>$(Bin64Dir)VRage.Render11.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
+    <Compile Remove="Anomaly\Dx11Entry.cs" />
+    <Compile Remove="Anomaly\AnomalyHook.cs" />
+    <Compile Remove="Anomaly\RenderTraceBind.cs" />
+    <Compile Remove="Rendering\HdrResources.cs" />
+    <Compile Remove="Rendering\UiBoost.cs" />
+    <Compile Remove="Rendering\ExrWriter.cs" />
+    <Compile Remove="Patches\**\*.cs" />
+    <Compile Remove="Tools\GameAssembliesToPublicize.cs" />
     <Reference Include="VRage.Scripting, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null">
       <HintPath>$(Bin64Dir)VRage.Scripting.dll</HintPath>
       <Private>False</Private>
@@ -287,36 +291,6 @@
     </PackageReference>
   </ItemGroup>
 
-  <ItemGroup>
-    <Reference Include="SharpDX">
-      <HintPath>$(Bin64Dir)SharpDX.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="SharpDX.Direct3D11">
-      <HintPath>$(Bin64Dir)SharpDX.Direct3D11.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="SharpDX.DXGI">
-      <HintPath>$(Bin64Dir)SharpDX.DXGI.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="SharpDX.D3DCompiler">
-      <HintPath>$(Bin64Dir)SharpDX.D3DCompiler.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-  </ItemGroup>
-
-  <PropertyGroup>
-    <PublicizerClearCacheOnClean>true</PublicizerClearCacheOnClean>
-    <PublicizerRuntimeStrategies>Unsafe;IgnoresAccessChecksTo</PublicizerRuntimeStrategies>
-    <PublicizerLogFilePath>$(MSBuildProjectDirectory)\Krafs.Publicizer.$(TargetFramework).log</PublicizerLogFilePath>
-  </PropertyGroup>
-
-  <ItemGroup>
-    <Publicize Include="VRage.Render11" />
-    <Publicize Include="VRage.Platform.Windows" />
-    <Publicize Include="VRage.Math" />
-  </ItemGroup>
 
   <Target Name="VerifyProps" BeforeTargets="BeforeBuild">
     <Exec Condition="$([MSBuild]::IsOSPlatform('Windows'))"

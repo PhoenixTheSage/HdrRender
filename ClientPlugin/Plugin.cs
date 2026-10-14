@@ -1,23 +1,18 @@
-using System;
 using System.Collections.Generic;
-using System.ComponentModel;
-using System.IO;
 using System.Reflection;
 using ClientPlugin.Anomaly;
-using ClientPlugin.Rendering;
 using ClientPlugin.RichHud;
 using ClientPlugin.Settings;
 using ClientPlugin.Settings.Layouts;
-using HarmonyLib;
 using JetBrains.Annotations;
 using Sandbox.Graphics.GUI;
-using SharpDX.DXGI;
 using VRage.Plugins;
-using VRageRender;
+
+[assembly: System.Runtime.CompilerServices.InternalsVisibleTo("HdrOutput.Dx11")]
 
 #if !DEV_BUILD
-[assembly: AssemblyVersion("1.2.1.0")]
-[assembly: AssemblyFileVersion("1.2.1.0")]
+[assembly: AssemblyVersion("1.3.0.0")]
+[assembly: AssemblyFileVersion("1.3.0.0")]
 #endif
 
 namespace ClientPlugin;
@@ -25,21 +20,22 @@ namespace ClientPlugin;
 public class Plugin : IPlugin
 {
     public const string Name = "HdrOutput";
-    internal static string StatusTitle { get; private set; } = "HDR Output";
-    internal static string StatusInfo { get; private set; }
-    internal static bool DisplayHdrSupported { get; private set; }
-    internal static bool IsLive { get; private set; }
+    internal static string StatusTitle { get; set; } = "HDR Output";
+    internal static string StatusInfo { get; set; }
+    internal static bool DisplayHdrSupported { get; set; }
+    internal static bool IsLive { get; set; }
+    internal static string AssetFolder { get; private set; }
+    internal static string AnomalyPackRoot { get; private set; }
 
-    static string _assetFolder;
-    static string _anomalyPackRoot;
     private SettingsGenerator _settingsGenerator;
 
     [UsedImplicitly]
     public void LoadAssets(string path)
     {
         VRage.Utils.MyLog.Default.WriteLine($"HDR: LoadAssets called with path: {path}");
-        _assetFolder = path;
-        HdrResources.SetAssetsPath(path);
+        AssetFolder = path;
+        if (AnomalyRenderer.AllowDx11Device)
+            Dx11Bridge.Call("SetAssetsPath", path);
     }
 
     [UsedImplicitly]
@@ -47,24 +43,18 @@ public class Plugin : IPlugin
     {
         if (assets == null)
             return;
-
         foreach (var pair in assets)
         {
             if (string.IsNullOrEmpty(pair.Value))
                 continue;
             VRage.Utils.MyLog.Default.WriteLine($"HDR: asset {pair.Key}={pair.Value}");
             if (pair.Key == "AnomalyPack")
-                _anomalyPackRoot = pair.Value;
+                AnomalyPackRoot = pair.Value;
             else
-            {
-                _assetFolder = pair.Value;
-                HdrResources.SetAssetsPath(pair.Value);
-            }
+                AssetFolder = pair.Value;
         }
-
-        // Pulsar 2.4+ may ship only AnomalyPack. UiComposite.hlsl lives next to it.
-        if (!string.IsNullOrEmpty(_anomalyPackRoot))
-            HdrResources.TryResolveShaderFolder(_anomalyPackRoot);
+        if (AnomalyRenderer.AllowDx11Device)
+            Dx11Bridge.Call("ApplyAssets");
     }
 
     [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
@@ -80,96 +70,50 @@ public class Plugin : IPlugin
             AnomalyTerminalHook.TryInstall();
             return;
         }
-
-        DetermineHdrMode();
         _settingsGenerator = new SettingsGenerator();
         AnomalyTerminalHook.TryInstall();
-
-        if (!IsLive)
-            return;
-
-        if (!AnomalyHook.RegistryFound)
-        {
-            StatusTitle = "HDR Output — Anomaly missing";
-            StatusInfo = (StatusInfo ?? "") + "\nAnomaly Shader Framework was not found. Enable Anomaly and restart.";
-            IsLive = false;
-            VRage.Utils.MyLog.Default.WriteLine("HDR: Anomaly not found; HDR pipeline not started");
-            return;
-        }
-
-        var packRoot = ResolvePackRoot();
-        if (string.IsNullOrEmpty(packRoot))
-        {
-            FailLive("HDR Output — Pack failed",
-                "Could not find the Anomaly Display pack. HDR pipeline not started.");
-            return;
-        }
-
-        HdrResources.TryResolveShaderFolder(packRoot);
-        HdrResources.TryResolveShaderFolder(_assetFolder);
-
-        try
-        {
-            HdrResources.InitShaders();
-            if (!AnomalyHook.TryRegisterPack(packRoot))
-            {
-                FailLive("HDR Output — Pack failed",
-                    AnomalyHook.RegistrationError ?? "Could not register the Anomaly Display pack. HDR pipeline not started.");
-                return;
-            }
-            Patches.SwapChainReplacer.ProbeFeatureSupport();
-            Patches.SwapChainReplacer.ApplyMaximumFrameLatency();
-
-            var harmony = new Harmony(Name);
-            harmony.PatchAll(Assembly.GetExecutingAssembly());
-        }
-        catch (Exception e)
-        {
-            FailLive("HDR Output — Init failed", e.Message);
-            VRage.Utils.MyLog.Default.WriteLine($"HDR: Init failed: {e}");
-            return;
-        }
-
-        Config.Current.PropertyChanged += OnConfigChanged;
-    }
-
-    static void FailLive(string title, string info)
-    {
-        StatusTitle = title;
-        StatusInfo = (StatusInfo ?? "") + "\n" + info;
-        IsLive = false;
-        VRage.Utils.MyLog.Default.WriteLine("HDR: " + info);
-    }
-
-    private static void OnConfigChanged(object sender, PropertyChangedEventArgs e)
-    {
-        switch (e.PropertyName)
-        {
-            case nameof(Config.HqTarget):
-                if (!IsLive)
-                    return;
-                MyRenderProxy.Settings.User.HqTarget = Config.Current.HqTarget;
-                MyRenderProxy.SetSettingsDirty();
-                break;
-            case nameof(Config.LowLatencyMode):
-                if (!IsLive)
-                    return;
-                Patches.SwapChainReplacer.ApplyMaximumFrameLatency();
-                break;
-        }
     }
 
     public void Dispose()
     {
         ConfigStorage.FlushPending(true);
-        Config.Current.PropertyChanged -= OnConfigChanged;
-        HdrResources.Release();
+        if (AnomalyRenderer.AllowDx11Device)
+            Dx11Bridge.Call("OnDispose");
     }
 
     public void Update()
     {
         AnomalyTerminalHook.TryInstall();
         ConfigStorage.FlushPending();
+        if (AnomalyRenderer.AllowGuestWork)
+            RequestRenderer(Config.Current.Enabled);
+        if (AnomalyRenderer.Decided && !AnomalyRenderer.AllowDx11Device && !Config.Current.DisabledAfterCrash)
+        {
+            StatusTitle = AnomalyRenderer.LinuxRequiresGuest
+                ? "HDR Output — waiting for Vulkan"
+                : "HDR Output — DX11 display closed";
+            StatusInfo = AnomalyRenderer.AllowGuestWork
+                ? "Vulkan requests an FP16 swapchain. The DXGI swapchain stays on DX11."
+                : AnomalyRenderer.LinuxRequiresGuest
+                    ? "Linux stays idle until Anomaly's Vulkan guest bus is open."
+                    : "Swapchain path stays on DX11. Renderer is " + AnomalyRenderer.ActiveName + ".";
+            IsLive = false;
+        }
+        if (!AnomalyRenderer.AllowDx11Device || Config.Current.DisabledAfterCrash)
+            return;
+        Dx11Bridge.Call("OnUpdate");
+    }
+
+    static void RequestRenderer(bool enabled)
+    {
+        foreach (var assembly in System.AppDomain.CurrentDomain.GetAssemblies())
+        {
+            var type = assembly.GetType("ClientPlugin.Shaders.DisplayServices", false);
+            if (type == null)
+                continue;
+            type.GetMethod(enabled ? "Request" : "Release")?.Invoke(null, new object[] { 1 });
+            return;
+        }
     }
 
     [UsedImplicitly]
@@ -177,77 +121,5 @@ public class Plugin : IPlugin
     {
         _settingsGenerator.SetLayout<Simple>();
         MyGuiSandbox.AddScreen(_settingsGenerator.Dialog);
-    }
-
-    static string ResolvePackRoot()
-    {
-        if (!string.IsNullOrEmpty(_anomalyPackRoot) && Directory.Exists(_anomalyPackRoot))
-            return _anomalyPackRoot;
-        if (string.IsNullOrEmpty(_assetFolder))
-            return _anomalyPackRoot;
-        var nested = Path.Combine(_assetFolder, "AnomalyPack");
-        return Directory.Exists(nested) ? nested : _anomalyPackRoot;
-    }
-
-    static void DetermineHdrMode()
-    {
-        try
-        {
-            var swapchain = MyRender11.m_swapchain;
-            if (swapchain == null)
-            {
-                StatusTitle = "HDR Output — Inactive";
-                StatusInfo = "No swapchain yet";
-                IsLive = false;
-                return;
-            }
-
-            var displayIsHdr = false;
-            try
-            {
-                using var output = swapchain.ContainingOutput;
-                using var output6 = output.QueryInterface<Output6>();
-                var desc = output6.Description1;
-                displayIsHdr = desc.ColorSpace == ColorSpaceType.RgbFullG2084NoneP2020;
-                StatusInfo = $"Peak: {desc.MaxLuminance:F0} nits | Full frame: {desc.MaxFullFrameLuminance:F0} nits\n" +
-                             $"Depth: {desc.BitsPerColor}-bit\n" +
-                             $"Mode: {(displayIsHdr ? "HDR" : "SDR")}";
-            }
-            catch
-            {
-                StatusInfo = "Cannot read display info";
-            }
-
-            DisplayHdrSupported = displayIsHdr;
-            var want = Config.Current.Enabled && (displayIsHdr || Config.Current.ForceEnable);
-            if (!want)
-            {
-                StatusTitle = displayIsHdr ? "HDR Output — Off (restart to enable)" : "HDR Output — Inactive";
-                VRage.Utils.MyLog.Default.WriteLine(
-                    $"HDR: {StatusInfo}. Enable HDR in settings (or ForceEnable) and restart.");
-                IsLive = false;
-                return;
-            }
-
-            if (displayIsHdr)
-            {
-                StatusTitle = "HDR Output — Active";
-                VRage.Utils.MyLog.Default.WriteLine($"HDR: Display HDR active. {StatusInfo}");
-            }
-            else
-            {
-                StatusTitle = "HDR Output — Forced";
-                VRage.Utils.MyLog.Default.WriteLine($"HDR: Force mode. {StatusInfo}");
-            }
-
-            IsLive = true;
-        }
-        catch (Exception e)
-        {
-            StatusTitle = "HDR Output — Error";
-            StatusInfo = e.Message;
-            IsLive = false;
-            VRage.Utils.MyLog.Default.WriteLine($"HDR: {e.Message}");
-        }
     }
 }
