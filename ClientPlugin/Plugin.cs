@@ -11,8 +11,8 @@ using VRage.Plugins;
 [assembly: System.Runtime.CompilerServices.InternalsVisibleTo("HdrOutput.Dx11")]
 
 #if !DEV_BUILD
-[assembly: AssemblyVersion("1.3.1.0")]
-[assembly: AssemblyFileVersion("1.3.1.0")]
+[assembly: AssemblyVersion("1.3.2.0")]
+[assembly: AssemblyFileVersion("1.3.2.0")]
 #endif
 
 namespace ClientPlugin;
@@ -80,6 +80,8 @@ public class Plugin : IPlugin
     public void Dispose()
     {
         ConfigStorage.FlushPending(true);
+        if (AnomalyRenderer.AllowGuestWork)
+            RequestRenderer(false);
         if (AnomalyRenderer.AllowDx11Device)
             Dx11Bridge.Call("OnDispose");
         SatelliteAssembly.Reset();
@@ -91,14 +93,17 @@ public class Plugin : IPlugin
         AnomalyTerminalHook.TryInstall();
         ConfigStorage.FlushPending();
         if (AnomalyRenderer.AllowGuestWork)
-            RequestRenderer(Config.Current.Enabled);
+            RequestRenderer(Config.Current.Enabled && !Config.Current.DisabledAfterCrash);
         if (AnomalyRenderer.Decided && !AnomalyRenderer.AllowDx11Device && !Config.Current.DisabledAfterCrash)
         {
             StatusTitle = AnomalyRenderer.LinuxRequiresGuest
                 ? "HDR Output — waiting for Vulkan"
-                : "HDR Output — DX11 display closed";
+                : AnomalyRenderer.AllowGuestWork
+                    ? "HDR Output — Vulkan presentation only"
+                    : "HDR Output — DX11 display closed";
             StatusInfo = AnomalyRenderer.AllowGuestWork
-                ? "Vulkan requests an FP16 swapchain. The DXGI swapchain stays on DX11."
+                ? "FP16 presentation request: " + (Config.Current.Enabled ? "on" : "off") +
+                  ". HDR grading and UI brightness await shared display support."
                 : AnomalyRenderer.LinuxRequiresGuest
                     ? "Linux stays idle until Anomaly's Vulkan guest bus is open."
                     : "Swapchain path stays on DX11. Renderer is " + AnomalyRenderer.ActiveName + ".";

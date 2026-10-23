@@ -1,5 +1,10 @@
 # HdrRender changelog
 
+## 1.3.2 — 2026-10-23
+
+- Honor DisabledAfterCrash on the Vulkan presentation request and release that request on disposal.
+- Identify Vulkan as presentation-only while grading/UI controls remain blocked on Anomaly's shared display contract; record the missing capabilities for later host work.
+
 ## 1.3.1 — 2026-10-14
 
 - Load the DX11 companion against the live Pulsar core identity and reset the resolver during disposal.
