@@ -1,5 +1,13 @@
 # HdrRender changelog
 
+## Unreleased
+
+- On Vulkan, register the Display pack and write its uniforms through Anomaly's
+  portable TonemapInputs, RenderClock and FullscreenPassRegistry facades. The
+  renderer grades it at the tone position into FP16 on an HDR swapchain.
+- Apply paper white, UI brightness, UI shoulder and peak to the Vulkan HUD
+  through DisplayServices.SetHdrUi, and clear the transform when HDR is disabled.
+
 ## 1.3.2 — 2026-10-23
 
 - Honor DisabledAfterCrash on the Vulkan presentation request and release that request on disposal.

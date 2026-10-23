@@ -81,7 +81,10 @@ public class Plugin : IPlugin
     {
         ConfigStorage.FlushPending(true);
         if (AnomalyRenderer.AllowGuestWork)
+        {
+            GuestDisplay.Disable();
             RequestRenderer(false);
+        }
         if (AnomalyRenderer.AllowDx11Device)
             Dx11Bridge.Call("OnDispose");
         SatelliteAssembly.Reset();
@@ -93,17 +96,20 @@ public class Plugin : IPlugin
         AnomalyTerminalHook.TryInstall();
         ConfigStorage.FlushPending();
         if (AnomalyRenderer.AllowGuestWork)
-            RequestRenderer(Config.Current.Enabled && !Config.Current.DisabledAfterCrash);
+        {
+            var enabled = Config.Current.Enabled && !Config.Current.DisabledAfterCrash;
+            RequestRenderer(enabled);
+            GuestDisplay.Update(enabled);
+        }
         if (AnomalyRenderer.Decided && !AnomalyRenderer.AllowDx11Device && !Config.Current.DisabledAfterCrash)
         {
             StatusTitle = AnomalyRenderer.LinuxRequiresGuest
                 ? "HDR Output — waiting for Vulkan"
                 : AnomalyRenderer.AllowGuestWork
-                    ? "HDR Output — Vulkan presentation only"
+                    ? "HDR Output — Vulkan"
                     : "HDR Output — DX11 display closed";
             StatusInfo = AnomalyRenderer.AllowGuestWork
-                ? "FP16 presentation request: " + (Config.Current.Enabled ? "on" : "off") +
-                  ". HDR grading and UI brightness await shared display support."
+                ? "FP16 presentation request: " + (Config.Current.Enabled ? "on" : "off") + ". " + GuestDisplay.Status + "."
                 : AnomalyRenderer.LinuxRequiresGuest
                     ? "Linux stays idle until Anomaly's Vulkan guest bus is open."
                     : "Swapchain path stays on DX11. Renderer is " + AnomalyRenderer.ActiveName + ".";
@@ -112,6 +118,16 @@ public class Plugin : IPlugin
         if (!AnomalyRenderer.AllowDx11Device || Config.Current.DisabledAfterCrash)
             return;
         Dx11Bridge.Call("OnUpdate");
+    }
+
+    internal static string ResolvePackRoot()
+    {
+        if (!string.IsNullOrEmpty(AnomalyPackRoot) && System.IO.Directory.Exists(AnomalyPackRoot))
+            return AnomalyPackRoot;
+        if (string.IsNullOrEmpty(AssetFolder))
+            return AnomalyPackRoot;
+        var nested = System.IO.Path.Combine(AssetFolder, "AnomalyPack");
+        return System.IO.Directory.Exists(nested) ? nested : AnomalyPackRoot;
     }
 
     static void RequestRenderer(bool enabled)
