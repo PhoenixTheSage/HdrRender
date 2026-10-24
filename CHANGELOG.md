@@ -1,6 +1,6 @@
 # HdrRender changelog
 
-## Unreleased
+## 1.4.0 — 2026-10-24
 
 - On Vulkan, register the Display pack and write its uniforms through Anomaly's
   portable TonemapInputs, RenderClock and FullscreenPassRegistry facades. The
