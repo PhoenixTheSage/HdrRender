@@ -7,6 +7,10 @@
   renderer grades it at the tone position into FP16 on an HDR swapchain.
 - Apply paper white, UI brightness, UI shoulder and peak to the Vulkan HUD
   through DisplayServices.SetHdrUi, and clear the transform when HDR is disabled.
+- On Vulkan, request AllowTearing and LowLatencyMode from the renderer (applied
+  live), keep F4 screenshots as EXR beside the paper-white SDR PNG, and show the
+  monitor's peak/full-frame luminance, bit depth and Windows HDR state in the
+  status.
 
 ## 1.3.2 — 2026-10-23
 

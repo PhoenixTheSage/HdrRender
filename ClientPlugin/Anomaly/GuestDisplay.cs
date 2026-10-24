@@ -14,14 +14,28 @@ internal static class GuestDisplay
     const string PassId = "hdr.tonemap";
     const BindingFlags Static = BindingFlags.Public | BindingFlags.Static;
 
-    static MethodInfo tryRegister, setUniforms, setHdrUi;
-    static PropertyInfo grading, enableTonemapping, needsAlphaLuminance, frameSeconds, hasDisplayTenant;
+    const string Owner = "hdr.output";
+    const int AllowTearing = 32, LowLatency = 64;
+    static MethodInfo tryRegister, setUniforms, setHdrUi, setHdrScreenshot, requestFor, releaseFor, releaseOwner;
+    static PropertyInfo grading, enableTonemapping, needsAlphaLuminance, frameSeconds, hasDisplayTenant, displayInfo;
     static bool probed, registered, uiActive;
     static string error;
 
     public static string Status =>
         error ?? (!registered ? "Display pack not registered" :
-            HasDisplayTenant ? "Display tenant registered; the renderer grades on an HDR swapchain" : "Display pack registered");
+            (HasDisplayTenant ? "Display tenant registered; the renderer grades on an HDR swapchain" : "Display pack registered") + DisplayLine());
+
+    // Same summary the DX11 companion prints from DXGI Output6.
+    static string DisplayLine()
+    {
+        var info = displayInfo?.GetValue(null);
+        if (info == null) return "";
+        T Field<T>(string name) => (T)info.GetType().GetField(name).GetValue(info);
+        string monitor = Field<bool>("DisplayKnown")
+            ? $"\nPeak: {Field<float>("MaxLuminance"):F0} nits | Full frame: {Field<float>("MaxFullFrameLuminance"):F0} nits\nDepth: {Field<int>("BitsPerColor")}-bit | Windows HDR: {(Field<bool>("DisplayHdr10") ? "on" : "off")}"
+            : "\nDisplay luminance unavailable";
+        return monitor + $"\nSwapchain: {(Field<bool>("HdrActive") ? "FP16 scRGB" : Field<bool>("HdrCapable") ? "SDR (HDR available)" : "SDR")} | Grade: {(Field<bool>("TenantGraded") ? "active" : "inactive")} | Tearing: {(Field<bool>("TearingActive") ? "on" : "off")}";
+    }
 
     static bool HasDisplayTenant => hasDisplayTenant?.GetValue(null) is true;
 
@@ -42,9 +56,15 @@ internal static class GuestDisplay
         var cfg = Config.Current;
         uiActive = true;
         setHdrUi?.Invoke(null, new object[] { cfg.PaperWhite, cfg.UiBrightness, cfg.UiShoulder, cfg.PeakBrightness });
+        setHdrScreenshot?.Invoke(null, new object[] { cfg.PaperWhite });
+        // DX11 AllowTearing and LowLatencyMode; Vulkan applies them on the next swapchain/frame without a restart.
+        Request(AllowTearing, cfg.AllowTearing);
+        Request(LowLatency, cfg.LowLatencyMode);
     }
 
     public static void Disable() => DisableUi();
+
+    static void Request(int bit, bool on) => (on ? requestFor : releaseFor)?.Invoke(null, new object[] { Owner, bit });
 
     static void DisableUi()
     {
@@ -52,6 +72,8 @@ internal static class GuestDisplay
             return;
         uiActive = false;
         setHdrUi?.Invoke(null, new object[] { 0f, 1f, 0f, 0f });
+        setHdrScreenshot?.Invoke(null, new object[] { 0f });
+        releaseOwner?.Invoke(null, new object[] { Owner });
     }
 
     static bool Probe()
@@ -85,6 +107,11 @@ internal static class GuestDisplay
             needsAlphaLuminance = inputs.GetProperty("NeedsAlphaLuminance", Static);
             frameSeconds = clock.GetProperty("FrameSeconds", Static);
             setHdrUi = display?.GetMethod("SetHdrUi", Static);
+            setHdrScreenshot = display?.GetMethod("SetHdrScreenshot", Static);
+            requestFor = display?.GetMethod("RequestFor", Static);
+            releaseFor = display?.GetMethod("ReleaseFor", Static);
+            releaseOwner = display?.GetMethod("ReleaseOwner", Static);
+            displayInfo = display?.GetProperty("Info", Static);
             hasDisplayTenant = owned?.GetProperty("HasDisplayTenant", Static);
             probed = true;
             break;
