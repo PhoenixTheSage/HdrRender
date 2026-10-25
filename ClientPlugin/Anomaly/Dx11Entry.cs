@@ -151,6 +151,7 @@ public static class Dx11Entry
                 Plugin.StatusInfo = $"Peak: {desc.MaxLuminance:F0} nits | Full frame: {desc.MaxFullFrameLuminance:F0} nits\n" +
                                     $"Depth: {desc.BitsPerColor}-bit\n" +
                                     $"Mode: {(displayIsHdr ? "HDR" : "SDR")}";
+                Plugin.DisplayHdrKnown = true;
             }
             catch
             {

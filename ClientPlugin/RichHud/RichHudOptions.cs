@@ -10,8 +10,7 @@ internal static class RichHudOptions
     public static string StatusLabel() =>
         (Plugin.StatusTitle ?? "HDR Output") + "\n" + (Plugin.StatusInfo ?? "");
 
-    public static bool HdrToggleEnabled() =>
-        Plugin.DisplayHdrSupported || Config.Current.ForceEnable;
+    public static string HdrWarning() => Plugin.HdrWarning;
 
     public static bool GetEnabled() => Config.Current.Enabled;
 

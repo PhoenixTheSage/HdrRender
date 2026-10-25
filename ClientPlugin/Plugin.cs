@@ -26,7 +26,18 @@ public class Plugin : IPlugin
     public static string StatusTitle { get; set; } = "HDR Output";
     public static string StatusInfo { get; set; }
     public static bool DisplayHdrSupported { get; set; }
+    // False until DXGI (DX11) or DisplayServices.Info (Vulkan) has read the monitor.
+    public static bool DisplayHdrKnown { get; set; }
     public static bool IsLive { get; set; }
+
+    public const string WindowsHdrOffWarning = "Windows HDR is off: turn on Use HDR in Windows display settings first";
+
+    // Shown above the HDR toggle in Pulsar and Rich HUD; never blocks the toggle itself.
+    public static string HdrWarning =>
+        !DisplayHdrKnown ? "Windows HDR: checking display..." :
+        DisplayHdrSupported ? "Windows HDR: on" :
+        Config.Current.ForceEnable ? "Windows HDR is off (Force enable is on)" :
+        WindowsHdrOffWarning;
     public static string AssetFolder { get; internal set; }
     public static string AnomalyPackRoot { get; internal set; }
 
@@ -94,6 +105,7 @@ public class Plugin : IPlugin
     {
         PluginStatusPage.TryInstall("HDR", Config.ShowStatus);
         AnomalyTerminalHook.TryInstall();
+        AnomalyTerminalHook.RefreshWarning();
         ConfigStorage.FlushPending();
         if (AnomalyRenderer.AllowGuestWork)
         {

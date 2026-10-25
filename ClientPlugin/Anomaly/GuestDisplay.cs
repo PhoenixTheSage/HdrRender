@@ -39,10 +39,25 @@ internal static class GuestDisplay
 
     static bool HasDisplayTenant => hasDisplayTenant?.GetValue(null) is true;
 
+    // The DX11 companion fills DisplayHdrSupported from DXGI Output6; on Vulkan nothing did,
+    // so the HDR toggle always read as "display not HDR". Read the same Windows HDR flag the status prints.
+    static void ReadWindowsHdr()
+    {
+        var info = displayInfo?.GetValue(null);
+        if (info == null)
+            return;
+        var type = info.GetType();
+        if (type.GetField("DisplayKnown")?.GetValue(info) is not true)
+            return;
+        Plugin.DisplayHdrKnown = true;
+        Plugin.DisplayHdrSupported = type.GetField("DisplayHdr10")?.GetValue(info) is true;
+    }
+
     public static void Update(bool enabled)
     {
         if (!Probe())
             return;
+        ReadWindowsHdr();
         if (!enabled)
         {
             DisableUi();

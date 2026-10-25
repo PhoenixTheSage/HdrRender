@@ -40,6 +40,11 @@ public class Config : INotifyPropertyChanged
     [UsedImplicitly]
     public string DisplayInfo => Plugin.StatusInfo ?? "";
 
+    [Label]
+    [XmlIgnore]
+    [UsedImplicitly]
+    public string HdrWarning => Plugin.HdrWarning;
+
     [Checkbox(description: "Enable the HDR pipeline. Requires Windows HDR on the current display, or ForceEnable. Restart to apply.")]
     public bool Enabled
     {

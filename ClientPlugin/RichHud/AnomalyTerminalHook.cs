@@ -18,6 +18,8 @@ internal static class AnomalyTerminalHook
     static readonly object Gate = new();
     static bool _installed;
     static string _lastRequestError;
+    static object _page;
+    static string _warning;
 
     public static bool Installed
     {
@@ -40,6 +42,7 @@ internal static class AnomalyTerminalHook
                 return false;
 
             Populate(page);
+            _page = page;
             _installed = true;
             MyLog.Default.WriteLine("HDR: Rich HUD page under Anomaly Shaders / " + FolderTitle + " / " + SettingsPage);
             return true;
@@ -49,7 +52,25 @@ internal static class AnomalyTerminalHook
     public static void Reset()
     {
         lock (Gate)
+        {
             _installed = false;
+            _page = null;
+        }
+    }
+
+    // Pull the Windows HDR label only when its text changes; Refresh re-pulls every control.
+    public static void RefreshWarning()
+    {
+        lock (Gate)
+        {
+            if (_page == null)
+                return;
+            var warning = RichHudOptions.HdrWarning();
+            if (warning == _warning)
+                return;
+            _warning = warning;
+            Invoke(_page.GetType(), _page, "Refresh");
+        }
     }
 
     static object RequestPageUnlocked()
@@ -110,11 +131,14 @@ internal static class AnomalyTerminalHook
     {
         var type = page.GetType();
         Invoke(type, page, "Category", "Display");
+        // No enabled predicate on the toggle: Rich HUD treats a disabled control as hidden, which
+        // reverted every click and broke the tile grid. The label explains Windows HDR instead.
+        _warning = RichHudOptions.HdrWarning();
+        Invoke(type, page, "Label", _warning, (Func<string>)RichHudOptions.HdrWarning);
         Invoke(type, page, "Checkbox", "HDR",
             (Func<bool>)RichHudOptions.GetEnabled,
             (Action<bool>)RichHudOptions.SetEnabled,
-            "Enable the HDR pipeline. Requires Windows HDR on this display, or ForceEnable. Restart to apply.",
-            (Func<bool>)RichHudOptions.HdrToggleEnabled);
+            "Enable the HDR pipeline. Requires Windows HDR on this display, or ForceEnable. Restart to apply.");
         Invoke(type, page, "Slider", "Peak", 200f, 2500f,
             (Func<float>)RichHudOptions.GetPeak,
             (Action<float>)RichHudOptions.SetPeak,
