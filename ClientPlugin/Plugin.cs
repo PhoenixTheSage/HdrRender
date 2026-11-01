@@ -11,8 +11,8 @@ using VRage.Plugins;
 [assembly: System.Runtime.CompilerServices.InternalsVisibleTo("HdrOutput.Dx11")]
 
 #if !DEV_BUILD
-[assembly: AssemblyVersion("1.3.2.0")]
-[assembly: AssemblyFileVersion("1.3.2.0")]
+[assembly: AssemblyVersion("1.4.1.0")]
+[assembly: AssemblyFileVersion("1.4.1.0")]
 #endif
 
 namespace ClientPlugin;

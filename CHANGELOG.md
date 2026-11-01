@@ -1,5 +1,12 @@
 # HdrRender changelog
 
+## 1.4.1 — 2026-11-01
+
+- Keep the HDR toggle usable on Vulkan and show Windows HDR guidance in Pulsar and Rich HUD instead of hiding or reverting the control.
+- Read Windows HDR support through Anomaly's portable display information and cache native display queries for 500 ms to avoid per-update render-worker stalls.
+- Forward LDR billboard intensity through Anomaly's optional SetHdrBillboards API on Vulkan, restoring neutral gain when HDR is disabled while preserving DX11 companion behavior.
+- Align core, DX11 companion and Pulsar source-build assembly versions.
+
 ## 1.4.0 — 2026-10-24
 
 - On Vulkan, register the Display pack and write its uniforms through Anomaly's

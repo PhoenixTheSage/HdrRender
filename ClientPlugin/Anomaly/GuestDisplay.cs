@@ -16,10 +16,16 @@ internal static class GuestDisplay
 
     const string Owner = "hdr.output";
     const int AllowTearing = 32, LowLatency = 64;
-    static MethodInfo tryRegister, setUniforms, setHdrUi, setHdrScreenshot, requestFor, releaseFor, releaseOwner;
+    static MethodInfo tryRegister, setUniforms, setHdrUi, setHdrScreenshot, setHdrBillboards, requestFor, releaseFor, releaseOwner;
     static PropertyInfo grading, enableTonemapping, needsAlphaLuminance, frameSeconds, hasDisplayTenant, displayInfo;
     static bool probed, registered, uiActive;
     static string error;
+    // DisplayServices.Info is a native call that waits for pipelined recording and queries the surface;
+    // reading it every update stalls the game thread on the render worker. Refresh twice a second.
+    const long InfoRefreshMs = 500;
+    static object info;
+    static bool infoRead;
+    static long infoReadAt;
 
     public static string Status =>
         error ?? (!registered ? "Display pack not registered" :
@@ -28,7 +34,7 @@ internal static class GuestDisplay
     // Same summary the DX11 companion prints from DXGI Output6.
     static string DisplayLine()
     {
-        var info = displayInfo?.GetValue(null);
+        var info = Info();
         if (info == null) return "";
         T Field<T>(string name) => (T)info.GetType().GetField(name).GetValue(info);
         string monitor = Field<bool>("DisplayKnown")
@@ -41,9 +47,21 @@ internal static class GuestDisplay
 
     // The DX11 companion fills DisplayHdrSupported from DXGI Output6; on Vulkan nothing did,
     // so the HDR toggle always read as "display not HDR". Read the same Windows HDR flag the status prints.
+    static object Info()
+    {
+        var now = System.Diagnostics.Stopwatch.GetTimestamp() * 1000 / System.Diagnostics.Stopwatch.Frequency;
+        if (displayInfo != null && (!infoRead || now - infoReadAt >= InfoRefreshMs))
+        {
+            infoRead = true;
+            infoReadAt = now;
+            info = displayInfo.GetValue(null);
+        }
+        return info;
+    }
+
     static void ReadWindowsHdr()
     {
-        var info = displayInfo?.GetValue(null);
+        var info = Info();
         if (info == null)
             return;
         var type = info.GetType();
@@ -72,6 +90,8 @@ internal static class GuestDisplay
         uiActive = true;
         setHdrUi?.Invoke(null, new object[] { cfg.PaperWhite, cfg.UiBrightness, cfg.UiShoulder, cfg.PeakBrightness });
         setHdrScreenshot?.Invoke(null, new object[] { cfg.PaperWhite });
+        // DX11 BillboardIntensityScalePatch's emissive lift; Rich HUD's PostPP lift follows SetHdrUi.
+        setHdrBillboards?.Invoke(null, new object[] { cfg.LdrIntensity });
         // DX11 AllowTearing and LowLatencyMode; Vulkan applies them on the next swapchain/frame without a restart.
         Request(AllowTearing, cfg.AllowTearing);
         Request(LowLatency, cfg.LowLatencyMode);
@@ -88,6 +108,7 @@ internal static class GuestDisplay
         uiActive = false;
         setHdrUi?.Invoke(null, new object[] { 0f, 1f, 0f, 0f });
         setHdrScreenshot?.Invoke(null, new object[] { 0f });
+        setHdrBillboards?.Invoke(null, new object[] { 1f });
         releaseOwner?.Invoke(null, new object[] { Owner });
     }
 
@@ -123,6 +144,7 @@ internal static class GuestDisplay
             frameSeconds = clock.GetProperty("FrameSeconds", Static);
             setHdrUi = display?.GetMethod("SetHdrUi", Static);
             setHdrScreenshot = display?.GetMethod("SetHdrScreenshot", Static);
+            setHdrBillboards = display?.GetMethod("SetHdrBillboards", Static);
             requestFor = display?.GetMethod("RequestFor", Static);
             releaseFor = display?.GetMethod("ReleaseFor", Static);
             releaseOwner = display?.GetMethod("ReleaseOwner", Static);
